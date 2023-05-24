@@ -1,21 +1,41 @@
----
-- name: Automating everything about apache2 sites
+#ce script vas generer les sites et les noms des dommaines automatiquement 
+
+- name: Déploiement des sites et génération automatique de noms de domaines
   hosts: localhost
-  become: yes
-  gather_facts: false
-  vars_prompt:
-    - name: "file_path"
-      prompt: "Path for the domains name file :"
-      private: false
+  become: true
+  vars:
+   site_content: "<html><body><h1>Voici mon site</h1></body></html>"
   tasks:
-    - name: Check if apache2 is installed
-      apt:
+   - name: générer les noms de domaine à partir d'un script
+     script: script/script.js
+     register: script_out
+
+   - name: Créer les répertoires des sites
+     file:
+       path: "var/www/{{ item }}"
+       state: directory
+     loop: {{ script_out.stdout_lines }}
+
+   - name: Copier les contenus du site
+     copy:
+       content: {{ site_content }}
+       dest: "var/www/{{ item }}/index.html"
+     loop: {{ script_out.stdout_lines }}
+
+   - name: Générer les fichiers de configurations Apache2
+     template:
+       src: "ansible/virtual_host.conf.j2"
+       dest: "/etc/apache2/sites-available/{{ item }}.conf"
+     loop: {{ script_out.stdout_lines }}
+     notify: Reload Apache2
+
+   - name: Activer les sites Apache2
+      ommand: a2ensite {{ item }}.conf
+      loop: "{{ generated_domains.stdout_lines }}"
+      notify: Reload Apache2
+
+  handlers:
+    - name: Reload Apache2
+      service:
         name: apache2
-        state: present
-    - name: Send a domains_name file to the givent host
-      copy:
-        src: {{ file_path }}
-        dest: /tmp/domains_name.txt
-    - name: Sead the donamains_name file
-      command: cat /tmp/domains_names.txt
-      register: names_output
+        state: reloaded
