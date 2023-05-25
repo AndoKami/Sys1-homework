@@ -1,0 +1,55 @@
+---
+- name: Automate Apache2 configuration
+  hosts: all
+  become: yes
+  tasks:
+  #i will do the step one by one 
+  #1
+    - name: Regarde si apache2 est intaller et l'installe si oui
+      apt:
+        name: apache2
+        state: present
+  #2
+    - name: Prend le fichier du domaine et le copie vers le serveur
+      copy:
+        src: domains
+        dest: /tmp/domains
+  #3
+    - name: lis les fichier de domaines
+      shell: cat /tmp/domains
+      register: names_output
+  #4
+    - name: Créé un fichier de configuration pouor chaque nom de domaines
+      template:
+        src: template.conf
+        dest: "/etc/apache2/sites-available/{{ item }}.conf"
+      loop: "{{ names_output.stdout_lines }}"
+      loop_control:
+        loop_var: item
+  #5
+    - name: Créé un fichier pour chaques domaines
+      file:
+        path: "/var/www/{{ item }}"
+        state: directory
+      loop: "{{ names_output.stdout_lines }}"
+      loop_control:
+        loop_var: item
+  #6
+    - name: Crée les pages html de chques domaines
+      template:
+        src: template.html
+        dest: "/var/www/{{ item }}/index.html"
+      loop: "{{ names_output.stdout_lines }}"
+      loop_control:
+        loop_var: item
+  #7
+    - name: Met en marches les config fait 
+      shell: a2ensite {{ item }}.conf
+      loop: "{{ names_output.stdout_lines }}"
+      loop_control:
+        loop_var: item
+  #8 : restart apaches and this normally work :')
+    - name: Redémare Apache2
+      service:
+        name: apache2
+        state: restarted
